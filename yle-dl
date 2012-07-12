@@ -303,7 +303,10 @@ class AreenaNGDownloader:
         if not playlist:
             return RD_FAILED
 
+        urlprefix, _, _ = url.rpartition("/")
         for clip in playlist:
+            url = "/".join((urlprefix, clip['id']))
+            clip = self.get_playlist(url, True)[0]
             res = self.process_single_episode(clip, url, parameters,
                                               sublang, destdir, print_url)
             if res != RD_SUCCESS:
