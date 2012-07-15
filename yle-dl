@@ -310,6 +310,7 @@ class AreenaNGDownloader:
             clip = self.get_playlist(url, True)[0]
             res = self.process_single_episode(clip, url, parameters,
                                               sublang, destdir, print_url)
+            time.sleep(2)
             if res != RD_SUCCESS:
                 return res
 
