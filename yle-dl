@@ -353,6 +353,11 @@ class AreenaNGDownloader:
         args += parameters
 
         outputfile = get_output_filename(args)
+        download_dir = os.path.dirname(outputfile)
+
+        if not os.path.isdir(download_dir):
+            os.makedirs(download_dir)
+
         media = clip.get('media', {})
         if media.has_key('subtitles'):
             self.download_subtitles(media['subtitles'], sublang, outputfile)
@@ -391,15 +396,20 @@ class AreenaNGDownloader:
 
         elif 'title' in clip:
             # Video or radio stream
-            filename = clip['title']
+            destdir = os.path.join(destdir, sane_filename(clip['title']))
             date = None
-            broadcasted = clip.get('broadcasted', None)
-            if broadcasted:
-                date = broadcasted.get('date', None)
-            if not date:
-                date = clip.get('published', None)
-            if date:
-                filename += '-' + date.replace('/', '-').replace(' ', '-')
+            title, _, _ = clip.get("desc", "").partition(".")
+            if title:
+                filename = title
+            else:
+                broadcasted = clip.get('broadcasted', None)
+
+                if broadcasted:
+                    date = broadcasted.get('date', None)
+                if not date:
+                    date = clip.get('published', None)
+                if date:
+                    filename = '/' + date.replace('/', '-').replace(' ', '-')
             filename += '.flv'
 
         else:
