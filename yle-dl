@@ -397,7 +397,8 @@ class AreenaNGDownloader:
 
         elif 'title' in clip:
             # Video or radio stream
-            destdir = os.path.join(destdir, sane_filename(clip['title']))
+            title = clip["title"].replace("(%s)" % clip["ageLimit"], "").strip()
+            destdir = os.path.join(destdir, sane_filename(title))
             date = None
             episodeNumber = clip.get("episodeNumber")
             headLine = clip.get("headLine")
@@ -413,7 +414,6 @@ class AreenaNGDownloader:
                 if date:
                     filename = date.replace('/', '-').replace(' ', '-')
             filename += '.flv'
-
         else:
             filename = 'areena.flv'
 
