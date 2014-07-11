@@ -390,6 +390,7 @@ class AreenaNGDownloader:
         return args
 
     def get_clip_filename(self, clip, destdir):
+        old_filename = None
         if 'channel' in clip:
             # Live radio broadcast
             curtime = time.strftime('-%Y-%m-%d-%H:%M:%S')
@@ -402,16 +403,19 @@ class AreenaNGDownloader:
             date = None
             episodeNumber = clip.get("episodeNumber")
             headLine = clip.get("headLine")
-            if not headLine:
-                broadcasted = clip.get('broadcasted', None)
+            broadcasted = clip.get('broadcasted', None)
 
-                if broadcasted:
-                    date = broadcasted.get('date', None)
-                if not date:
-                    date = clip.get('published', None)
-                if date:
-                    headLine = date.replace('/', '-').replace(' ', '-')
-            filename = "%s - %s" % (episodeNumber, headLine)
+            if broadcasted:
+                date = broadcasted.get('date', None)
+            if not date:
+                date = clip.get('published', None)
+            if date:
+                stamp = date.replace('/', '-').replace(' ', '-')
+            if headLine:
+                old_filename = sane_filename("%s - %s" % (episodeNumber, stamp))
+                filename = "%s - %s - %s" % (episodeNumber, headLine, stamp)
+            else:
+                filename = "%s - %s" % (episodeNumber, stamp)
 
             filename += '.flv'
         else:
@@ -420,6 +424,10 @@ class AreenaNGDownloader:
         filename = sane_filename(filename)
 
         if destdir:
+            if old_filename:
+                old_filename = os.path.join(destdir, old_filename)
+                if os.path.exists(old_filename):
+                    os.rename(old_filename, filename)
             filename = os.path.join(destdir, filename)
 
         return filename
