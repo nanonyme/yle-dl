@@ -615,8 +615,9 @@ class AreenaNGDownloader:
                        available_clips.get('video', []) + \
                        available_clips.get('audio', [])
 
+        playlist = sorted(playlist, key=self.get_media_time)
         if latest_episode:
-            playlist = sorted(playlist, key=self.get_media_time)[-1:]
+            playlist = playlist[-1:]
 
         return playlist
 
