@@ -402,9 +402,7 @@ class AreenaNGDownloader:
             date = None
             episodeNumber = clip.get("episodeNumber")
             headLine = clip.get("headLine")
-            if headLine and episodeNumber:
-                filename = "%s - %s" % (episodeNumber, headLine)
-            else:
+            if not headLine:
                 broadcasted = clip.get('broadcasted', None)
 
                 if broadcasted:
@@ -412,7 +410,9 @@ class AreenaNGDownloader:
                 if not date:
                     date = clip.get('published', None)
                 if date:
-                    filename = date.replace('/', '-').replace(' ', '-')
+                    headLine = date.replace('/', '-').replace(' ', '-')
+            filename = "%s - %s" % (episodeNumber, headLine)
+
             filename += '.flv'
         else:
             filename = 'areena.flv'
