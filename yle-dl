@@ -89,6 +89,19 @@ def usage():
     log(u'')
     subprocess.call([rtmpdump_binary, '--help'])
 
+class CustomRedirector(urllib2.HTTPRedirectHandler):
+    def http_error_302(self, req, fp, code, msg, headers):
+        origin = req.get_full_url()
+        location = headers["Location"]
+        if origin.endswith(".json") and not location.endswith(".json"):
+            headers["Location"] = location + ".json"
+        result = urllib2.HTTPRedirectHandler.http_error_302(
+            self, req, fp, code, msg, headers)
+        return result
+
+
+opener = urllib2.build_opener(CustomRedirector)
+
 def download_page(url):
     """Returns contents of a HTML page at url."""
     if url.find('://') == -1:
@@ -98,7 +111,7 @@ def download_page(url):
 
     request = urllib2.Request(url, headers=AREENA_NG_HTTP_HEADERS)
     try:
-        urlreader = urllib2.urlopen(request)
+        urlreader = opener.open(request)
         content = urlreader.read()
 
         charset = urlreader.info().getparam('charset')
@@ -223,7 +236,7 @@ def next_available_filename(proposed):
         log(u'%s exists, trying an alternative name' % filename)
         filename = basename + '-' + str(i) + ext
         i += 1
-        
+
     return filename
 
 def which(program):
@@ -288,7 +301,7 @@ class AreenaNGDownloader:
     # Extracted from
     # http://areena.yle.fi/static/player/1.2.8/flowplayer/flowplayer.commercial-3.2.7-encrypted.swf
     AES_KEY = 'hjsadf89hk123ghk'
-    
+
     def download_episodes(self, url, parameters, latest_episode, sublang, destdir):
         """Extract all episodes (or just the latest episode if
         latest_only is True) from url."""
@@ -341,6 +354,11 @@ class AreenaNGDownloader:
         args += parameters
 
         outputfile = get_output_filename(args)
+        download_dir = os.path.dirname(outputfile)
+
+        if not os.path.isdir(download_dir):
+            os.makedirs(download_dir)
+
         media = clip.get('media', {})
         if media.has_key('subtitles'):
             self.download_subtitles(media['subtitles'], sublang, outputfile)
@@ -379,15 +397,20 @@ class AreenaNGDownloader:
 
         elif 'title' in clip:
             # Video or radio stream
-            filename = clip['title']
+            destdir = os.path.join(destdir, sane_filename(clip['title']))
             date = None
-            broadcasted = clip.get('broadcasted', None)
-            if broadcasted:
-                date = broadcasted.get('date', None)
-            if not date:
-                date = clip.get('published', None)
-            if date:
-                filename += '-' + date.replace('/', '-').replace(' ', '-')
+            title, _, _ = clip.get("desc", "").partition(".")
+            if title:
+                filename = title
+            else:
+                broadcasted = clip.get('broadcasted', None)
+
+                if broadcasted:
+                    date = broadcasted.get('date', None)
+                if not date:
+                    date = clip.get('published', None)
+                if date:
+                    filename = '/' + date.replace('/', '-').replace(' ', '-')
             filename += '.flv'
 
         else:
@@ -397,7 +420,7 @@ class AreenaNGDownloader:
 
         if destdir:
             filename = os.path.join(destdir, filename)
-            
+
         return filename
 
     def get_rtmp_parameters(self, clip, pageurl):
@@ -413,11 +436,11 @@ class AreenaNGDownloader:
             clip = self.get_metadata(clip)
             if not clip:
                 return None
-        
+
         media = clip.get('media', {})
         if not media:
             return None
-        
+
         if media.get('live', False) == True:
             islive = True
             papiurl = 'http://papi.yle.fi/ng/live/rtmp/' + media['id'] + '/fin'
@@ -440,8 +463,9 @@ class AreenaNGDownloader:
     def rtmp_parameters_from_papi(self, papiurl, pageurl, islive):
         papi = download_page(papiurl)
         if not papi:
+            log('Failed to download papi')
             return None
-        
+
         papi_decoded = self.decode_papi(papi)
 
         if debug:
@@ -450,26 +474,30 @@ class AreenaNGDownloader:
         try:
             papi_xml = xml.dom.minidom.parseString(papi_decoded)
         except Exception as exc:
-            log(unicode(exc, 'utf-8'))
+            log(unicode(exc, 'utf-8', 'ignore'))
             return None
 
         nodelist = papi_xml.getElementsByTagName('connect')
-        if len(nodelist) != 1 or len(nodelist[0].childNodes) != 1:
+        if len(nodelist) < 1 or len(nodelist[0].childNodes) < 1:
+            log('No <connect> node!')
             return None
         rtmp_connect = nodelist[0].firstChild.nodeValue
 
         nodelist = papi_xml.getElementsByTagName('stream')
-        if len(nodelist) != 1 or len(nodelist[0].childNodes) != 1:
+        if len(nodelist) < 1 or len(nodelist[0].childNodes) < 1:
+            log('No <stream> node!')
             return None
         rtmp_stream = nodelist[0].firstChild.nodeValue
 
         try:
             scheme, edgefcs, rtmppath = self.rtmpurlparse(rtmp_connect)
-        except ValueError:
+        except ValueError as exc:
+            log(unicode(exc, 'utf-8', 'ignore'))
             return None
-        
+
         ident = download_page('http://%s/fcs/ident' % edgefcs)
         if ident is None:
+            log('Failed to read ident')
             return None
 
         if debug:
@@ -482,7 +510,8 @@ class AreenaNGDownloader:
             return None
 
         nodelist = identxml.getElementsByTagName('ip')
-        if len(nodelist) != 1 or len(nodelist[0].childNodes) != 1:
+        if len(nodelist) < 1 or len(nodelist[0].childNodes) < 1:
+            log('No <ip> node!')
             return None
         rtmp_ip = nodelist[0].firstChild.nodeValue
 
@@ -533,7 +562,7 @@ class AreenaNGDownloader:
         except ValueError:
             log(u'Invalid JSON file at ' +  jsonurl)
             return None
-        
+
         return clipjson
 
     def decode_papi(self, papi):
@@ -541,7 +570,7 @@ class AreenaNGDownloader:
             bytestring = base64.b64decode(str(papi))
         except (UnicodeEncodeError, TypeError):
             return None
-        
+
         iv = bytestring[:16]
         ciphertext = bytestring[16:]
         padlen = 16 - (len(ciphertext) % 16)
@@ -557,7 +586,7 @@ class AreenaNGDownloader:
             return [{'channel': {'lang': 'fi',
                                  'name': 'Yle Radio Puhe',
                                  'id': '48'}}]
-        
+
         (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(url)
         episodeurl = urlparse.urlunparse((scheme, netloc, path + '.json', params, query, ''))
         jsonstr = download_page(episodeurl)
@@ -587,8 +616,9 @@ class AreenaNGDownloader:
                        available_clips.get('video', []) + \
                        available_clips.get('audio', [])
 
+        playlist = sorted(playlist, key=self.get_media_time)
         if latest_episode:
-            playlist = sorted(playlist, key=self.get_media_time)[-1:]
+            playlist = playlist[-1:]
 
         return playlist
 
@@ -600,7 +630,7 @@ class AreenaNGDownloader:
             urltype = 'radio'
         else:
             urltype = 'tv'
-        
+
         return 'http://areena.yle.fi/%s/%s' % (urltype, media['id'])
 
     def download_subtitles(self, available_subtitles, preferred_lang, videofilename):
@@ -638,12 +668,12 @@ class AreenaNGDownloader:
         else:
             with open(filename, 'r') as sub_file:
                 content = sub_file.read()
-        if content == sub_string:
-            return False
-        else:
+
+        if content != sub_string:
             with open(filename, 'w') as sub_file:
                 sub_file.write(sub_string)
                 return True
+        return False
 
     def parse_yle_date(self, yledate):
         """Convert strings like 2012-06-16T18:45:00 into a struct_time.
@@ -697,7 +727,7 @@ class ElavaArkistoDownloader:
                           'playpath': playpath,
                           'downloadURL': downloadURL,
                           'filename': title + ext})
-            
+
         return clips
 
     def download_single_episode(self, rtmpurl, playpath, downloadURL,
@@ -705,14 +735,14 @@ class ElavaArkistoDownloader:
         if downloadURL:
             log('Downloading from HTTP server...')
             log_output_file(filename)
-            
+
             enc = sys.getfilesystemencoding()
             try:
                 urllib.urlretrieve(downloadURL, filename.encode(enc))
             except IOError, exc:
                 log(u'Download failed: ' + str(exc))
                 return RD_FAILED
-            
+
             log_output_file(filename, True)
             return RD_SUCCESS
         else:
@@ -751,7 +781,7 @@ class ElavaArkistoDownloader:
             path = path.rsplit('.', 1)[0]
         path = path + '.json'
         jsonurl = urlparse.urlunparse((scheme, netloc, path, '', '', ''))
-        
+
         mediajson = download_page(jsonurl)
         if mediajson is None:
             return None
@@ -886,7 +916,7 @@ class YleXDownloader(AreenaNGDownloader):
 
 ### main program ###
 
-    
+
 def main():
     global debug
     global rtmpdump_binary
@@ -934,7 +964,7 @@ def main():
             rtmpdumpargs.append(arg)
             if arg in ARGOPTS and argv:
                 rtmpdumpargs.append(argv.pop(0))
-            
+
     if not rtmpdump_binary:
         if sys.platform == 'win32':
             rtmpdump_binary = which('rtmpdump.exe')
