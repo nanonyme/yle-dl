@@ -399,9 +399,10 @@ class AreenaNGDownloader:
             # Video or radio stream
             destdir = os.path.join(destdir, sane_filename(clip['title']))
             date = None
-            title, _, _ = clip.get("desc", "").partition(".")
-            if title:
-                filename = title
+            episodeNumber = clip.get("episodeNumber")
+            headLine = clip.get("headLine")
+            if headLine and episodeNumber:
+                filename = "%s - %s" % (episodeNumber, headLine)
             else:
                 broadcasted = clip.get('broadcasted', None)
 
@@ -410,14 +411,14 @@ class AreenaNGDownloader:
                 if not date:
                     date = clip.get('published', None)
                 if date:
-                    filename = '/' + date.replace('/', '-').replace(' ', '-')
+                    filename = date.replace('/', '-').replace(' ', '-')
             filename += '.flv'
 
         else:
             filename = 'areena.flv'
 
         filename = sane_filename(filename)
-
+        raise Exception(filename)
         if destdir:
             filename = os.path.join(destdir, filename)
 
