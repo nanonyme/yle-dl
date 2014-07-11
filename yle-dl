@@ -418,7 +418,7 @@ class AreenaNGDownloader:
             filename = 'areena.flv'
 
         filename = sane_filename(filename)
-        raise Exception(filename)
+
         if destdir:
             filename = os.path.join(destdir, filename)
 
